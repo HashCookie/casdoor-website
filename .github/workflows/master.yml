@@ -26,7 +26,6 @@ jobs:
           cd prince-14.2-linux-generic-x86_64
           yes "" | sudo ./install.sh
 
-      # https://github.com/signcl/docusaurus-prince-pdf
       - name: Generate PDF 🖨️
         run: |
           yarn serve > /dev/null &
