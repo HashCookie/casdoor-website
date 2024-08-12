@@ -1,83 +1,80 @@
 name: Build and Deploy
-on: 
+on:
   push:
-      branches:
-        - test
+    branches:
+      - test
+
 jobs:
-  build-and-deploy:
-    # env: 
-    #   CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout 🛎️
         uses: actions/checkout@v3
 
-      - name: Check system resources before build
-        run: |
-          echo "Disk space:"
-          df -h
-          echo "Memory usage:"
-          free -h
-          echo "Top processes:"
-          top -b -n 1 | head -n 20
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'yarn'
 
-      - name: Install and Build 🔧
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build
+        run: yarn build
+
+      - name: Install PDF prerequisites
         run: |
-          yarn install
-          # yarn crowdin:sync
-          yarn build
-    
-      - name: Build PDF prerequisites 🔨
-        run: |
-          sudo apt install fonts-noto -y
-          curl https://www.princexml.com/download/prince-14.2-linux-generic-x86_64.tar.gz -O
-          tar zxf prince-14.2-linux-generic-x86_64.tar.gz
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto
+          curl -L https://www.princexml.com/download/prince-14.2-linux-generic-x86_64.tar.gz | tar xz
           cd prince-14.2-linux-generic-x86_64
-          yes "" | sudo ./install.sh
+          sudo ./install.sh
 
-      - name: Generate PDF 🖨️
+      - name: Generate PDFs
         run: |
           yarn serve > /dev/null &
           sleep 3s
-          npx docusaurus-prince-pdf --include-index -u http://localhost:3000/docs/overview --output pdf/Casdoor_Docs.pdf
-          npx docusaurus-prince-pdf --include-index -u http://localhost:3000/zh/docs/overview --list-only
-          wget https://gist.githubusercontent.com/Selflocking/7a07d91d34ee227c93d2d8f583f981e3/raw/996a610b96e7e1f42e06ec555528f3427c2fb647/print.css
-          prince --no-warn-css --style=print.css --input-list=./pdf/localhost-zh-docs-overview.txt -o pdf/Casdoor_Docs_zh.pdf
-          rm pdf/*.txt
-          mv pdf/* build/pdf/ -f
+          mkdir -p build/pdf
+          npx docusaurus-prince-pdf --include-index -u http://localhost:3000/docs/overview --output build/pdf/Casdoor_Docs.pdf
+          npx docusaurus-prince-pdf --include-index -u http://localhost:3000/zh/docs/overview --output build/pdf/Casdoor_Docs_zh.pdf
+          wget https://gist.githubusercontent.com/Selflocking/7a07d91d34ee227c93d2d8f583f981e3/raw/996a610b96e7e1f42e06ec555528f3427c2fb647/print.css -O print.css
+          prince --no-warn-css --style=print.css build/pdf/Casdoor_Docs_zh.pdf
+          rm print.css
 
-      - name: Check system resources after build
-        run: |
-          echo "Disk space:"
-          df -h
-          echo "Memory usage:"
-          free -h
-          echo "Top processes:"
-          top -b -n 1 | head -n 20
-
-      - name: Upload results 📤
+      - name: Upload build artifact
         uses: actions/upload-artifact@v3
         with:
-          name: PDFs
-          path: build/pdf/
-          if-no-files-found: error
+          name: build
+          path: build
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: build
+          path: build
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          ssh-key: ${{ secrets.DEPLOY_KEY}}
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
           git-config-name: ${{ secrets.GH_NAME }}
           git-config-email: ${{ secrets.GH_EMAIL }}
           repository-name: casdoor/casdoor.github.io
-          branch: master # The deploy branch.
-          folder: build # The deploy folder.
+          branch: master
+          folder: build
 
-      - name: Final system resources check
-        if: always()
-        run: |
-          echo "Final Disk space:"
-          df -h
-          echo "Final Memory usage:"
-          free -h
-          echo "Final Top processes:"
-          top -b -n 1 | head -n 20
+  cleanup:
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Delete artifact
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: build
