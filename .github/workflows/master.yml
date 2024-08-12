@@ -2,41 +2,31 @@ name: Build and Deploy
 on: 
   push:
       branches:
-        - master
+        - test
 jobs:
   build-and-deploy:
+    env: 
+      CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
     runs-on: ubuntu-latest
     steps:
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
       - name: Checkout 🛎️
         uses: actions/checkout@v3
 
-      - name: Cache dependencies
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/yarn
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
+      - name: Check system resources before build
+        run: |
+          echo "Disk space:"
+          df -h
+          echo "Memory usage:"
+          free -h
+          echo "Top processes:"
+          top -b -n 1 | head -n 20
 
       - name: Install and Build 🔧
         run: |
           yarn install
+          yarn crowdin:sync
           yarn build
-
-      - name: Check disk space after build
-        run: df -h
-
+    
       - name: Build PDF prerequisites 🔨
         run: |
           sudo apt install fonts-noto -y
@@ -56,15 +46,14 @@ jobs:
           rm pdf/*.txt
           mv pdf/* build/pdf/ -f
 
-      - name: Clean up 🧹
+      - name: Check system resources after build
         run: |
-          rm -rf prince-14.2-linux-generic-x86_64*
-          yarn cache clean
-          npm cache clean --force
-          sudo apt-get clean
-
-      - name: Check disk space after PDF generation
-        run: df -h
+          echo "Disk space:"
+          df -h
+          echo "Memory usage:"
+          free -h
+          echo "Top processes:"
+          top -b -n 1 | head -n 20
 
       - name: Upload results 📤
         uses: actions/upload-artifact@v3
@@ -76,9 +65,19 @@ jobs:
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          ssh-key: ${{ secrets.DEPLOY_KEY}}
           git-config-name: ${{ secrets.GH_NAME }}
           git-config-email: ${{ secrets.GH_EMAIL }}
           repository-name: casdoor/casdoor.github.io
           branch: master # The deploy branch.
           folder: build # The deploy folder.
+
+      - name: Final system resources check
+        if: always()
+        run: |
+          echo "Final Disk space:"
+          df -h
+          echo "Final Memory usage:"
+          free -h
+          echo "Final Top processes:"
+          top -b -n 1 | head -n 20
