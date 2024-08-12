@@ -5,8 +5,6 @@ on:
         - master
 jobs:
   build-and-deploy:
-    env: 
-      CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout 🛎️
@@ -15,9 +13,8 @@ jobs:
       - name: Install and Build 🔧
         run: |
           yarn install
-          yarn crowdin:sync
           yarn build
-    
+
       - name: Build PDF prerequisites 🔨
         run: |
           sudo apt install fonts-noto -y
@@ -47,7 +44,7 @@ jobs:
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          ssh-key: ${{ secrets.DEPLOY_KEY}}
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
           git-config-name: ${{ secrets.GH_NAME }}
           git-config-email: ${{ secrets.GH_EMAIL }}
           repository-name: casdoor/casdoor.github.io
